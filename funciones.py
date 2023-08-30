@@ -47,3 +47,27 @@ def distribucion_porcentual(df,cols):
         valor_counts = df[colname].value_counts('%')*100
         print(f"Distribución porcentual de la variable '{colname}':")
         print(valor_counts)
+
+def validador_high_season(fecha):
+     
+    """
+    Función que permite reconocer si es o no high_season
+
+
+    """
+   
+    es_high_season = [
+        (12, 15, 31),  # Diciembre
+        (1, 1, 31),     # Enero
+        (2, 1, 31),     # Febrero
+        (3, 1, 3),     # Marzo
+        (7, 15, 31),   # Julio
+        (9, 11, 30)]   # Septiembre
+    for mes, dia_i, dia_f in es_high_season:
+        if fecha.month == mes and dia_i <= fecha.day <= dia_f:
+            return 1
+    
+    return 0
+
+
+    
