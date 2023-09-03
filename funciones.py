@@ -1,7 +1,22 @@
+
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split as TTS,cross_val_predict,GridSearchCV
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.svm import SVC
+import xgboost as xgb
+from sklearn.model_selection import cross_val_score
+
+
+#metricas
+from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc
+from sklearn.inspection import permutation_importance
 
 def countplot(df,variables,xi,yi,hue=None):
     
@@ -18,7 +33,7 @@ def countplot(df,variables,xi,yi,hue=None):
     Graficos en dos columnas diferentes.
     """
     filas = 2
-    cols = (len(variables) + 1) // 2
+    cols = (len(variables)+1) // 2
 
     fig, axs = plt.subplots(cols, filas, figsize=(xi,yi))
     axs = axs.ravel()
@@ -123,7 +138,7 @@ def boxplot(df,variables,xi,yi,var_y=None,hue=None):
     Grafico de boxplot a variable sele
     """
     filas = 2
-    cols = (len(variables) + 1) // 2
+    cols = (len(variables)+1) // 2
 
     fig, axs = plt.subplots(cols, filas, figsize=(xi,yi))
     axs = axs.ravel() 
@@ -171,4 +186,74 @@ def minutos_diff(dfs,var):
 
     plt.tight_layout()
     return plt.show()
+
+def modelamiento(df,var,modelo,param_grid,cv=None,n_jobs=None,verbose=None):
+
+    """
+    Función que procesa diferentes modelos y entrega sus metricas respectivas
+
+    Parámetros:
+    df: Dataframe con el que se modelará.
+    var: variable objetivo.
+    modelo: Tipo de modelo a utilizar
+    param_grid: Hiperparametros para utilizar en la grilla.
+    cv: Cantidad de pliegues a usar en la validación cruzada
+    n_jobs: Cantidad de núcleos del sistema para el procesamiento del modelo.
+    verbose: Monitorear el progreso de un algoritmo de machine learning.
+
+    Retorno:
+
+    Metricas de los modelos predictivos, es decir, Precisión, recall, F1, accurancy, matriz de confusion y curva de roc.
+    """
+    X_train, X_test, y_train, y_test = TTS(df.drop(columns=[var]), df[var], test_size=0.33, random_state=2208)
+
+    grilla = GridSearchCV(modelo, param_grid=param_grid, cv=cv, n_jobs=n_jobs, verbose=verbose)
+    #y_LG_cv_predict = cross_val_predict(grilla, X_train, y_train, cv=cv, n_jobs=n_jobs, verbose=verbose)
+    grilla.fit(X_train, y_train)
+    y_predict = grilla.best_estimator_.predict(X_test)
     
+    conf_matrix = confusion_matrix(y_test, y_predict)
+    print('Mejores parámetros: ', grilla.best_params_)
+    print('Mejor puntaje     : ', grilla.best_score_)
+    print('Metricas a evaluar: \n',classification_report(y_test, y_predict))
+    plt.figure(figsize=(8, 6))
+    class_names = ["Negativo", "Positivo"]
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues",
+                xticklabels=class_names, yticklabels=class_names)
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.title('Matriz de Confusión')
+    plt.show()
+    
+    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label='Curva ROC (AUC = %0.2f)' % auc(fpr, tpr))
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Tasa de Falsos Positivos (FPR)')
+    plt.ylabel('Tasa de Verdaderos Positivos (TPR)')
+    plt.title('Curva ROC')
+    plt.legend(loc='lower right')
+    plt.show()
+    
+    if isinstance(modelo, LogisticRegression):
+        coeficientes = grilla.best_estimator_.coef_
+        coeficientes_absolutos = abs(coeficientes)
+        nombres_caracteristicas = X_train.columns
+        coeficientes_df = pd.DataFrame({'Caracteristica': nombres_caracteristicas, 'Coeficiente_Absoluto': coeficientes_absolutos[0]})
+        coeficientes_ordenados = coeficientes_df.sort_values(by='Coeficiente_Absoluto', ascending=False)
+        nombres_coeficientes = coeficientes_ordenados['Caracteristica'].tolist()
+        coeficientes_coef = coeficientes_ordenados['Coeficiente_Absoluto'].tolist()
+        for nombre, coef in zip(nombres_coeficientes, coeficientes_coef):
+            print(f'Característica: {nombre}, Coeficiente Absoluto: {coef}')
+    
+    else:
+        importancia_caracteristicas = grilla.best_estimator_.feature_importances_
+        nombres_caracteristicas = X_train.columns
+        importancia_df = pd.DataFrame({'Caracteristica': nombres_caracteristicas, 'Importancia': importancia_caracteristicas})
+        importancia_ordenada = importancia_df.sort_values(by='Importancia', ascending=False)
+        nombres_importancia = importancia_ordenada['Caracteristica'].tolist()
+        importancia_valores = importancia_ordenada['Importancia'].tolist()
+        for nombre, importancia in zip(nombres_importancia, importancia_valores):
+            print(f'Característica: {nombre}, Importancia: {importancia}')
